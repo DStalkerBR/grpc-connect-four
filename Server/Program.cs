@@ -1,4 +1,4 @@
-using GrpcConnectFour.Server.Services;
+using ConnectFour.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddGrpc();
+builder.Services.AddSingleton<GameService>();
 
 var app = builder.Build();
 
