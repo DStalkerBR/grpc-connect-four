@@ -1,8 +1,7 @@
-﻿using System;
-using System.Threading.Tasks;
-using Grpc.Net.Client;
+﻿using Grpc.Net.Client;
 using ConnectFour.Shared;
 using Google.Protobuf.WellKnownTypes;
+using System;
 
 class Program
 {
@@ -15,47 +14,59 @@ class Program
 
         var client = new ConnectFourGameService.ConnectFourGameServiceClient(channel);
 
-        Random random = new Random();
+        var nomePlayer = Console.ReadLine();
+        // Conecta o jogador
+        var player1 = new Player { Name = nomePlayer };
+        await client.ConnectPlayerAsync(player1);
 
-        var player1 = new Player { Name = "Player 1", PlayerId = 1 };
-        var player2 = new Player { Name = "Player 2", PlayerId = 2 };
+        // Aguarda a conexão do segundo jogador
         var gameStatus = await client.GetGameStatusAsync(new Empty());
-
-        // server still does not logic to determine who is the first player
-        bool player1Turn = true;
-        while (true)
+        while (gameStatus.Player1 == null || gameStatus.Player2 == null)
         {
-            var currentPlayer = player1Turn ? player1 : player2;
-            Console.WriteLine("Movimento do jogador " + currentPlayer.Name);
-            int column = random.Next(1, 8);
-            Console.WriteLine("Jogador está tentando colocar uma peça na coluna " + column);
-            var moveRequest = new MoveRequest
-            {
-                Player = currentPlayer,
-                Column = column
-            };
+            Console.WriteLine("Aguardando a conexão do segundo jogador...");
+            gameStatus = await client.GetGameStatusAsync(new Empty());
+            await Task.Delay(500);
+        }
+        DisplayGame(gameStatus);
+
+        // Simula movimentos no jogo (substitua com sua lógica real de movimento)
+        await MakeFakeMoves(client, gameStatus);
+
+    }
+
+    static async Task<bool> MakeFakeMoves(ConnectFourGameService.ConnectFourGameServiceClient client, Game game)
+    {
+        // Simula movimentos alternados entre os jogadores
+        Random random = new Random();
+        while (!game.IsGameOver)
+        {
+            int column = random.Next(1, 8); // Gera uma coluna aleatória (de 1 a 7)
+            var moveRequest = new MoveRequest { PlayerId = game.CurrentTurn, Column = column };
 
             var moveResponse = await client.MakeMoveAsync(moveRequest);
+            game = moveResponse.Game;
+            DisplayGame(game);
 
-            if (moveResponse.IsValidMove)
+            if (!moveResponse.IsValidMove)
             {
-                Console.WriteLine("Movimento válido. Estado do jogo atualizado:");
-                DisplayGame(moveResponse.Game);
-            }
-            else if (moveResponse.Game.IsGameOver)
-            {
-                Console.WriteLine("O jogo acabou!");
-                Console.WriteLine("Vencedor: " + moveResponse.Game.Winner.Name);
-                break;
-            }
-            else
-            {
-                Console.WriteLine("Movimento inválido.");
+                Console.WriteLine("Movimento inválido. Tente novamente.");
             }
 
-            player1Turn = !player1Turn;
+            await Task.Delay(100); // Aguarda 1 segundo entre os movimentos (para simulação)
+        }
+
+        if (game.Winner != null)
+        {
+            Console.WriteLine($"O jogador {game.Winner.Name} venceu!");
+            return true;
+        }
+        else
+        {
+            Console.WriteLine("Empate!");
+            return false;
         }
     }
+
 
     static void DisplayGame(Game game)
     {

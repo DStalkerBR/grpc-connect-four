@@ -16,7 +16,7 @@ enum PieceType {
 }
 
 message MoveRequest {
-  Player player = 1;
+  int32 player_id = 1;
   int32 column = 2;
 }
 
@@ -32,12 +32,14 @@ message Row {
 message Game {
   Player player1 = 1;
   Player player2 = 2;
-  repeated Row board = 3;
-  bool is_game_over = 4;
-  Player winner = 5;
+  int32 current_turn = 3;
+  repeated Row board = 4;
+  bool is_game_over = 5;
+  Player winner = 6;
 }
 
 service ConnectFourGameService {
   rpc MakeMove(MoveRequest) returns (MoveResponse);
   rpc GetGameStatus(google.protobuf.Empty) returns (Game);
+  rpc ConnectPlayer(Player) returns (google.protobuf.Empty);
 }
