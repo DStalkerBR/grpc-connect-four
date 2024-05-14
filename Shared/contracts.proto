@@ -38,8 +38,13 @@ message Game {
   Player winner = 6;
 }
 
+message TurnResponse {
+  int32 player_id = 1;
+}
+
 service ConnectFourGameService {
   rpc MakeMove(MoveRequest) returns (MoveResponse);
   rpc GetGameStatus(google.protobuf.Empty) returns (Game);
-  rpc ConnectPlayer(Player) returns (google.protobuf.Empty);
+  rpc ConnectPlayer(Player) returns (Player);
+  rpc GetTurn(google.protobuf.Empty) returns (TurnResponse);
 }

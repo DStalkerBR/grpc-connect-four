@@ -285,7 +285,7 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
         return Task.FromResult(currentGame);
     }
 
-    public override Task<Empty> ConnectPlayer(Player request, ServerCallContext context)
+    public override Task<Player> ConnectPlayer(Player request, ServerCallContext context)
     {
         if (currentGame.IsGameOver)
         {
@@ -315,10 +315,19 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
 
         // Define o ID do jogador com base na ordem de conexão
         request.PlayerId = connectedPlayers;
-
-        return Task.FromResult(new Empty());
+        Player playerResponse = new Player
+        {
+            PlayerId = request.PlayerId,
+            Name = request.Name
+        };
+        
+        return Task.FromResult(playerResponse);
     }
 
+    public override Task<TurnResponse> GetTurn (Empty request, ServerCallContext context)
+    {
+        return Task.FromResult(new TurnResponse { PlayerId = currentGame.CurrentTurn });
+    }
  
 
     private void ResetGame()
