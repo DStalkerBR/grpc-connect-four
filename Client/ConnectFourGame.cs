@@ -66,8 +66,9 @@ public class ConnectFourGame
             else
             {
                 Console.Clear();
+                Console.WriteLine("\x1b[3J");
                 Console.WriteLine("Aguarde o outro jogador...");
-                
+
                 DisplayGame(_gameState);
             }
             await Task.Delay(100);
@@ -76,6 +77,7 @@ public class ConnectFourGame
         if (_gameState.Winner != null)
         {
             Console.Clear();
+            Console.WriteLine("\x1b[3J");
             DisplayGame(_gameState);
             if (_gameState.Winner.PlayerId == _currentPlayer.PlayerId)
                 Console.WriteLine("Parabéns! Você venceu!");
@@ -94,13 +96,18 @@ public class ConnectFourGame
         int boardWidth = _gameState.Board[0].Pieces.Count;
 
         ConsoleKey key;
+
+        // Clear the input buffer
         while (Console.KeyAvailable)
         {
             Console.ReadKey(true);
         }
+
+        // If the game is in auto play mode, select a random column
         if (_autoPlay)
         {
             Console.Clear();
+            Console.WriteLine("\x1b[3J");
             Console.WriteLine("Realizando jogada automática...");
             _gameState = await _client.GetGameStatusAsync(new Empty());   
 
@@ -113,9 +120,11 @@ public class ConnectFourGame
         }
         else
         {
+            // Wait for the player to make a move
             do
             {
                 Console.Clear();
+                Console.WriteLine("\x1b[3J");
                 Console.WriteLine("Sua vez de jogar!");
                 _gameState = await _client.GetGameStatusAsync(new Empty());
                 DisplayGame(_gameState, selectedColumn);
@@ -123,10 +132,22 @@ public class ConnectFourGame
                     return;
 
                 key = Console.ReadKey(true).Key;
+
+                // Verify if the player wants to exit the game
                 if (key == ConsoleKey.Escape)
+                {
+                    // Use ConnectPlayer to send a player with an invalid ID to the server                    
+                    await _client.ConnectPlayerAsync(new Player { PlayerId = -1, Name = "Invalid" });
+                    Environment.Exit(0);
+                }
+
+                // Verify if the player wants to play automatically
+                if (key == ConsoleKey.Spacebar)
                 {
                     _autoPlay = true;
                 }
+
+                // Move the cursor to the left or right
                 if (key == ConsoleKey.LeftArrow && selectedColumn > 0)
                 {
                     selectedColumn--;
@@ -135,7 +156,7 @@ public class ConnectFourGame
                 {
                     selectedColumn++;
                 }
-            } while (key != ConsoleKey.Enter && key != ConsoleKey.Escape);
+            } while (key != ConsoleKey.Enter && key != ConsoleKey.Spacebar);
         }
 
 
@@ -146,11 +167,16 @@ public class ConnectFourGame
         if (!moveResponse.IsValidMove)
         {
             Console.WriteLine("Movimento inválido. Tente novamente.");
-            await Task.Delay(1000); // Aguarda um pouco para que o jogador veja a mensagem de erro antes de continuar
+            await Task.Delay(1000);
         }
     }
 
-    private void DisplayGame(Game game, int selectedColumn = -1)
+    /// <summary>
+    /// Displays the Connect Four game board with the current state of the game.
+    /// </summary>
+    /// <param name="game">The Connect Four game object.</param>
+    /// <param name="selectedColumn">The index of the selected column (optional).</param>
+    private static void DisplayGame(Game game, int selectedColumn = -1)
     {
         int boardWidth = game.Board[0].Pieces.Count;
 
@@ -189,6 +215,11 @@ public class ConnectFourGame
     }
 
 
+    /// <summary>
+    /// Gets the symbol representation of a given piece type.
+    /// </summary>
+    /// <param name="pieceType">The type of the piece.</param>
+    /// <returns>The symbol representation of the piece type.</returns>
     private static string GetPieceSymbol(PieceType pieceType)
     {
         return pieceType switch

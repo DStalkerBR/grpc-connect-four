@@ -1,6 +1,5 @@
 using Grpc.Core;
 using ConnectFour.Shared;
-using System.Diagnostics;
 using Google.Protobuf.WellKnownTypes;
 
 namespace ConnectFour.Server.Services;
@@ -9,50 +8,109 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
     private Game currentGame;
     private int connectedPlayers = 0;
     private bool isGameReady = false;
+    private readonly int rows;
+    private readonly int columns;
 
-    public GameService()
+    public GameService(int rows = 6, int columns = 7)
     {
         this.currentGame = new Game
         {
             Player1 = null,
             Player2 = null,
-            CurrentTurn = 1,
+            CurrentTurn = new Random().Next(1, 3),
             IsGameOver = false,
             Winner = null
         };
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < rows; i++)
         {
             var row = new Row();
-            for (int j = 0; j < 7; j++)
+            for (int j = 0; j < columns; j++)
             {
                 row.Pieces.Add(PieceType.Empty);
             }
             this.currentGame.Board.Add(row);
         }
+        this.rows = rows;
+        this.columns = columns;
     }
 
+
+    /// <summary>
+    /// Retrieves the current status of the game.
+    /// </summary>
+    /// <param name="request">The request message.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>The current game status.</returns>
+    public override Task<Game> GetGameStatus(Empty request, ServerCallContext context)
+    {
+        return Task.FromResult(currentGame);
+    }
+
+    /// <summary>
+    /// Connects a player to the game and assigns a player ID.
+    /// </summary>
+    /// <param name="request">The player to connect.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>The connected player with assigned player ID.</returns>
+    public override Task<Player> ConnectPlayer(Player request, ServerCallContext context)
+    {
+        if (currentGame.IsGameOver)
+        {
+            ResetGame();
+        }
+
+        // ResetGame if client sends a PlayerId of -1
+        if (request.PlayerId == -1){
+            ResetGame();
+            return Task.FromResult(new Player());
+        }
+
+        if (connectedPlayers >= 2 || isGameReady)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "Máximo de jogadores conectados atingido."));
+        } 
+
+        connectedPlayers++;
+
+        if (connectedPlayers == 1)
+        {
+            currentGame.Player1 = request;
+        }
+        else if (connectedPlayers == 2)
+        {
+            currentGame.Player2 = request;
+            isGameReady = true;
+        }
+
+        // Define o ID do jogador com base na ordem de conexão
+        request.PlayerId = connectedPlayers;
+        Player playerResponse = new Player
+        {
+            PlayerId = request.PlayerId,
+            Name = request.Name
+        };
+        
+        return Task.FromResult(playerResponse);
+    }
+
+    public override Task<TurnResponse> GetTurn (Empty request, ServerCallContext context)
+    {
+        return Task.FromResult(new TurnResponse { PlayerId = currentGame.CurrentTurn });
+    }
+ 
+
+    /// <summary>
+    /// Makes a move in the game.
+    /// </summary>
+    /// <param name="request">The move request.</param>
+    /// <param name="context">The server call context.</param>
+    /// <returns>The move response.</returns>
     public override Task<MoveResponse> MakeMove(MoveRequest request, ServerCallContext context)
     {
         MoveResponse response = new MoveResponse();
 
-        // Check if the game is ready
-        if (!isGameReady)
-        {
-            response.IsValidMove = false;
-            response.Game = currentGame;
-            return Task.FromResult(response);
-        }
-
-        // Check if the game is already over
-        if (currentGame.IsGameOver)
-        {
-            response.IsValidMove = false;
-            response.Game = currentGame;
-            return Task.FromResult(response);
-        }
-
-         // Verify if the player is the current turn
-        if (request.PlayerId != currentGame.CurrentTurn)
+        // Verify if the game is ready and the player is allowed to make a move
+        if (!isGameReady || currentGame.IsGameOver || request.PlayerId != currentGame.CurrentTurn)
         {
             response.IsValidMove = false;
             response.Game = currentGame;
@@ -68,14 +126,7 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
             return Task.FromResult(response);
         }
 
-        // Validate the move position
         int column = request.Column;
-        if (column < 0 || column > currentGame.Board[0].Pieces.Count)
-        {
-            response.IsValidMove = false;
-            response.Game = currentGame;
-            return Task.FromResult(response);
-        }
 
         Console.WriteLine($"Player {currentPlayer.PlayerId} is attempting to place a piece in column {column}");
 
@@ -84,13 +135,27 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
         response.IsValidMove = moveResult;
         response.Game = currentGame;
 
-        currentGame.CurrentTurn = (currentGame.CurrentTurn == 1) ? 2 : 1;
+        if (moveResult)
+            currentGame.CurrentTurn = (currentGame.CurrentTurn == 1) ? 2 : 1;
 
         return Task.FromResult(response);
     }
 
+    /// <summary>
+    /// Processes a move in the game by placing a piece in the specified column for the current player.
+    /// </summary>
+    /// <param name="column">The column where the piece should be placed.</param>
+    /// <param name="currentPlayer">The current player making the move.</param>
+    /// <returns>True if the move was successfully processed, false otherwise.</returns>
     private bool ProcessMove(int column, Player currentPlayer)
     {
+
+        // Check if the column is valid
+        if (column < 0 || column > currentGame.Board[0].Pieces.Count)
+        {
+            return false;
+        }        
+
         // Find the first empty row in the specified column
         int row = -1;
         for (int i = currentGame.Board.Count - 1; i >= 0; i--)
@@ -114,13 +179,19 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
         // Place the piece in the board
         currentGame.Board[row].Pieces[column - 1] = pieceType;
 
-
         // Check if the game is over
         currentGame.IsGameOver = CheckGameOver(row, column, pieceType);
 
         return true;
     }
 
+    /// <summary>
+    /// Checks if the game is over by determining if there is a winning condition or a draw.
+    /// </summary>
+    /// <param name="row">The row index of the last played piece.</param>
+    /// <param name="column">The column index of the last played piece.</param>
+    /// <param name="pieceType">The type of the last played piece.</param>
+    /// <returns>True if the game is over, false otherwise.</returns>
     private bool CheckGameOver(int row, int column, PieceType pieceType)
     {
         // Check for a horizontal win
@@ -148,8 +219,6 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
                 break;
             }
         }
-
-        Console.WriteLine($"Horizontal count: {horizontalCount}");
 
         if (horizontalCount >= 4)
         {
@@ -190,8 +259,6 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
             return true;
         }
         
-        Console.WriteLine($"Vertical count: {verticalCount}");
-
         // Check for a diagonal win (top-left to bottom-right)
         int diagonalCount1 = 1;
         for (int i = row - 1, j = column - 2; i >= 0 && j >= 0; i--, j--)
@@ -271,65 +338,12 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
             }
         }
 
-        if (isDraw)
-        {
-            return true;
-        }
-
-        return false;
+        return isDraw;
     }
 
-
-    public override Task<Game> GetGameStatus(Empty request, ServerCallContext context)
-    {
-        return Task.FromResult(currentGame);
-    }
-
-    public override Task<Player> ConnectPlayer(Player request, ServerCallContext context)
-    {
-        if (currentGame.IsGameOver)
-        {
-            ResetGame();
-        }
-
-        if (connectedPlayers >= 2 || isGameReady)
-        {
-            throw new RpcException(new Status(StatusCode.FailedPrecondition, "Máximo de jogadores conectados atingido."));
-        } 
-
-        connectedPlayers++;
-
-        if (connectedPlayers == 1)
-        {
-            currentGame.Player1 = request;
-        }
-        else if (connectedPlayers == 2)
-        {
-            currentGame.Player2 = request;
-        }
-
-        if (connectedPlayers == 2)
-        {
-            isGameReady = true;
-        }
-
-        // Define o ID do jogador com base na ordem de conexão
-        request.PlayerId = connectedPlayers;
-        Player playerResponse = new Player
-        {
-            PlayerId = request.PlayerId,
-            Name = request.Name
-        };
-        
-        return Task.FromResult(playerResponse);
-    }
-
-    public override Task<TurnResponse> GetTurn (Empty request, ServerCallContext context)
-    {
-        return Task.FromResult(new TurnResponse { PlayerId = currentGame.CurrentTurn });
-    }
- 
-
+    /// <summary>
+    /// Resets the game by initializing the game state and clearing the game board.
+    /// </summary>
     private void ResetGame()
     {
         connectedPlayers = 0;
@@ -339,14 +353,14 @@ public class GameService : ConnectFourGameService.ConnectFourGameServiceBase
         {
             Player1 = null,
             Player2 = null,
-            CurrentTurn = 1,
+            CurrentTurn = new Random().Next(1, 3),
             IsGameOver = false,
             Winner = null
         };
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < rows; i++)
         {
             var row = new Row();
-            for (int j = 0; j < 7; j++)
+            for (int j = 0; j < columns; j++)
             {
                 row.Pieces.Add(PieceType.Empty);
             }

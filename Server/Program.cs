@@ -7,7 +7,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddGrpc();
-builder.Services.AddSingleton<GameService>();
+builder.Services.AddSingleton<GameService>(sp =>
+    {
+        var boardSizeConfig = builder.Configuration.GetSection("GameSettings").GetSection("BoardSize");
+        var rows = boardSizeConfig.GetSection("Rows").Get<int>();
+        var columns = boardSizeConfig.GetSection("Columns").Get<int>();
+        return new GameService(rows, columns);
+    }
+);
 
 var app = builder.Build();
 
