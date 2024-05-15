@@ -8,14 +8,18 @@ namespace ConnectFour.Client.Services;
 public class ConnectFourGame
 {
     private readonly ConnectFourGameService.ConnectFourGameServiceClient _client;
-    private readonly GrpcChannel _channel; 
+    private readonly GrpcChannel _channel;
     private Game _gameState;
-    private Player _currentPlayer;    
+    private Player _currentPlayer;
+    private bool _autoPlay;
 
     public ConnectFourGame()
     {
-        var handler = new HttpClientHandler();
-        handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+        _autoPlay = false;
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
         _channel = GrpcChannel.ForAddress("http://localhost:5034", new GrpcChannelOptions { HttpHandler = handler });
         _client = new ConnectFourGameService.ConnectFourGameServiceClient(_channel);
         _gameState = new Game();
@@ -49,13 +53,11 @@ public class ConnectFourGame
 
     private async Task PlayGameAsync()
     {
-        Random random = new Random();
+        TurnResponse turnResponse;
 
         while (!_gameState.IsGameOver)
         {
-            var turnResponse = await _client.GetTurnAsync(new Empty());
-            Console.WriteLine($"Turno do jogador: {turnResponse.PlayerId}");
-            Console.WriteLine($"Você é o jogador: {_currentPlayer.PlayerId}");
+            turnResponse = await _client.GetTurnAsync(new Empty());
 
             if (turnResponse.PlayerId == _currentPlayer.PlayerId)
             {
@@ -65,16 +67,20 @@ public class ConnectFourGame
             {
                 Console.Clear();
                 Console.WriteLine("Aguarde o outro jogador...");
+                
                 DisplayGame(_gameState);
             }
-            await Task.Delay(500);
+            await Task.Delay(100);
         }
 
         if (_gameState.Winner != null)
         {
             Console.Clear();
             DisplayGame(_gameState);
-            Console.WriteLine($"O jogador {_gameState.Winner.Name} venceu!");
+            if (_gameState.Winner.PlayerId == _currentPlayer.PlayerId)
+                Console.WriteLine("Parabéns! Você venceu!");
+            else
+                Console.WriteLine($"O jogador {_gameState.Winner.Name} venceu!");
         }
         else
         {
@@ -84,40 +90,84 @@ public class ConnectFourGame
 
     private async Task MakeMoveAsync()
     {
-        Console.Clear();
-        Console.WriteLine("Sua vez de jogar!");
-        Console.WriteLine("Digite a coluna (1 a 7): ");
-        _gameState = await _client.GetGameStatusAsync(new Empty());
-        DisplayGame(_gameState);
-        if (_gameState.IsGameOver)
-            return;
-        int column = int.Parse(Console.ReadLine());         
+        int selectedColumn = 0;
+        int boardWidth = _gameState.Board[0].Pieces.Count;
 
-        var moveRequest = new MoveRequest { PlayerId = _currentPlayer.PlayerId, Column = column };
+        ConsoleKey key;
+        while (Console.KeyAvailable)
+        {
+            Console.ReadKey(true);
+        }
+        if (_autoPlay)
+        {
+            Console.Clear();
+            Console.WriteLine("Realizando jogada automática...");
+            _gameState = await _client.GetGameStatusAsync(new Empty());   
+
+            selectedColumn = new Random().Next(0, boardWidth);
+            DisplayGame(_gameState, selectedColumn);
+            
+            if (_gameState.IsGameOver)
+                    return;
+            await Task.Delay(500);
+        }
+        else
+        {
+            do
+            {
+                Console.Clear();
+                Console.WriteLine("Sua vez de jogar!");
+                _gameState = await _client.GetGameStatusAsync(new Empty());
+                DisplayGame(_gameState, selectedColumn);
+                if (_gameState.IsGameOver)
+                    return;
+
+                key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Escape)
+                {
+                    _autoPlay = true;
+                }
+                if (key == ConsoleKey.LeftArrow && selectedColumn > 0)
+                {
+                    selectedColumn--;
+                }
+                else if (key == ConsoleKey.RightArrow && selectedColumn < boardWidth - 1)
+                {
+                    selectedColumn++;
+                }
+            } while (key != ConsoleKey.Enter && key != ConsoleKey.Escape);
+        }
+
+
+        var moveRequest = new MoveRequest { PlayerId = _currentPlayer.PlayerId, Column = selectedColumn + 1 };
         var moveResponse = await _client.MakeMoveAsync(moveRequest);
         _gameState = moveResponse.Game;
 
         if (!moveResponse.IsValidMove)
         {
             Console.WriteLine("Movimento inválido. Tente novamente.");
+            await Task.Delay(1000); // Aguarda um pouco para que o jogador veja a mensagem de erro antes de continuar
         }
     }
 
-    private void DisplayGame(Game game)
+    private void DisplayGame(Game game, int selectedColumn = -1)
     {
         int boardWidth = game.Board[0].Pieces.Count;
 
         Console.Write("   ");
         for (int col = 0; col < boardWidth; col++)
         {
-            Console.Write($" {col + 1}  ");
+            if (selectedColumn != -1)
+                Console.Write($" {(col == selectedColumn ? "V" : " ")}  ");
+            else
+                Console.Write($" {col + 1}  ");
         }
         Console.WriteLine();
 
         Console.WriteLine("  ┌───" + "┬───".Repeat(boardWidth - 1) + "┐");
         for (int row = 0; row < game.Board.Count; row++)
         {
-            Console.Write($"  │");
+            Console.Write("  │");
             foreach (var piece in game.Board[row].Pieces)
             {
                 string symbol = GetPieceSymbol(piece);
@@ -125,7 +175,7 @@ public class ConnectFourGame
                     Console.ForegroundColor = ConsoleColor.Red;
                 else if (piece == PieceType.Player2)
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Write($" {symbol} ");            
+                Console.Write($" {symbol} ");
                 Console.ResetColor();
                 Console.Write("│");
             }
@@ -139,20 +189,15 @@ public class ConnectFourGame
     }
 
 
-
-    private string GetPieceSymbol(PieceType pieceType)
+    private static string GetPieceSymbol(PieceType pieceType)
     {
-        switch (pieceType)
+        return pieceType switch
         {
-            case PieceType.Empty:
-                return "·";
-            case PieceType.Player1:
-                return "X";
-            case PieceType.Player2:
-                return "O";
-            default:
-                return "?";
-        }
+            PieceType.Empty => "·",
+            PieceType.Player1 => "X",
+            PieceType.Player2 => "O",
+            _ => "?",
+        };
     }
 }
 
