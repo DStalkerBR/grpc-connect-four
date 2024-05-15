@@ -4,13 +4,13 @@ This project is a Connect Four game implementation using gRPC in .NET 7 for the 
 
 ## Introduction
 
-In this project, we aim to develop a Connect Four game using gRPC as the communication protocol. The game will be implemented in .NET 7 and will allow players to connect to a server and play against each other.
+In this project, we have developed a Connect Four game using gRPC as the communication protocol. The game is implemented in .NET 7 and allows players to connect to a server and play against each other.
 
-The game will be played by two players, each taking turns to drop a piece in one of the columns. The first player to connect four pieces in a row, column, or diagonal wins the game.
+The game is played by two players, each taking turns to drop a piece in one of the columns. The first player to connect four pieces in a row, column, or diagonal wins the game.
 
-The server will be responsible for managing the game state, validating moves, and notifying players of the game's progress. The client will be responsible for displaying the game board, accepting player input, and sending moves to the server.
+The server manages the game state, validates moves, and notifies players of the game's progress. The client displays the game board, accepts player input, and sends moves to the server.
 
-The game will be implemented using the following technologies:
+The game was implemented using the following technologies:
 
 - .NET 7
 - gRPC
@@ -54,16 +54,41 @@ To install and run the Connect Four game, follow these steps:
 
 The game is played by two players, each taking turns to drop a piece in one of the columns. The first player to connect four pieces in a row, column, or diagonal wins the game.
 
-To make a move, enter the column number where you want to drop your piece (1-7).
+### Controls
+- Use the **left and right arrows**  keys to select the column where you want to drop your piece.
+- Press the **Enter** key to confirm your move.
+- Press the **ESC** key to exit the game.
+- Press **Space** to restart the game.
 
 The game board is displayed as follows:
 
 ```
-    1 2 3 4 5 6 7
-1 | - - - - - - - |
-2 | - - - - - - - |
-3 | - - - - - - - |
-4 | - - - - - - - |
-5 | - - - - - - - |
-6 | - - - - - - - |
+    1   2   3   4   5   6   7 
+  ┌───┬───┬───┬───┬───┬───┬───┐
+  │ · │ · │ · │ · │ · │ · │ · │
+  ├───┼───┼───┼───┼───┼───┼───┤
+  │ · │ · │ · │ · │ · │ · │ · │
+  ├───┼───┼───┼───┼───┼───┼───┤
+  │ · │ · │ · │ · │ · │ · │ · │
+  ├───┼───┼───┼───┼───┼───┼───┤
+  │ · │ · │ · │ · │ · │ · │ · │
+  ├───┼───┼───┼───┼───┼───┼───┤
+  │ · │ · │ · │ · │ · │ · │ · │
+  ├───┼───┼───┼───┼───┼───┼───┤
+  │ · │ · │ · │ · │ · │ · │ · │
+  └───┴───┴───┴───┴───┴───┴───┘
 ```
+
+The game board displays the columns from 1 to 7, and the rows from 1 to 6. The empty cells are represented by a dot (·), and the player pieces are represented by the following characters:
+- Player 1: X
+- Player 2: O
+
+<small>It's possible to change the size of the board by changing the `BoardSize` in appsettings.json.</small>
+
+## Limitations
+- The game currently supports only two players per match.
+- No automatic reconnection support for clients. If a player disconnects, the game ends, and the server must be restarted to begin a new match.
+- No support for multiple matches. The server can only handle one match at a time.
+- No use of streaming in protobuf messages, which could potentially improve application performance, but not essential for this project.
+
+
